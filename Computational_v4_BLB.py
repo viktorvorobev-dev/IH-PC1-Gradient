@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 import numpy as np
 import imageio.v2 as imageio
 from matplotlib import pyplot as plt
@@ -22,8 +19,8 @@ import seaborn as sns
 from tqdm import tqdm
 from skimage import morphology
 
-# In[2]:
-
+import scipy.linalg as spla
+import numpy.linalg as la
 
 def upload(name):
     layout = [[sg.Text('Choose Folders with Files for ' + str(name) + ' patient:')],
@@ -37,13 +34,9 @@ def upload(name):
         continue
         
     gray = lambda rgb : np.dot(rgb[... , :3] , [1. , 1., 1. ])    
-    images_cube = np.array((gray(imageio.imread(current_dir + '/' + files[i])) for i in range(8)))
+    images_cube = np.array(list(gray(np.array(imageio.imread(current_dir + '/' + files[i]))).T for i in range(8))).T
 #     hypercube_of_images = np.dstack((tuple(images_cube)))
     return images_cube#hypercube_of_images
-
-
-# In[3]:
-
 
 def crop_image(hypercube_of_images, name):
     w_name = "Contour Determination"
@@ -292,13 +285,12 @@ def crop_image(hypercube_of_images, name):
                 
             
             gray = lambda rgb : np.dot(rgb[... , :3] , [1. , 1., 1. ])
-            ref_images_cube = np.array((gray(np.array(imageio.imread(reference_files[i]))) for i in range(8)))
+            ref_images_cube = np.array(list(gray(np.array(imageio.imread(reference_files[i]))).T for i in range(8))).T
 #             ref_hypercube_of_images = np.dstack((tuple(ref_images_cube)))
         
-        
-            hc_output = hypercube_of_images[int(y1*2048/560):int(y2*2048/560),int(x1*2048/560):int(x2*2048/560),:]
-            hc_output = hc_output / (ref_hypercube_of_images[int(y1*2048/560):int(y2*2048/560),int(x1*2048/560):int(x2*2048/560),:]+1e-3)
-            
+               
+            hc_output = hypercube_of_images[int(y1*1536/420):int(y2*1536/420),int(x1*2048/560):int(x2*2048/560),:]
+            hc_output = hc_output / (ref_images_cube[int(y1*1536/420):int(y2*1536/420),int(x1*2048/560):int(x2*2048/560),:]+1e-4)
             return hc_output
         
         
@@ -315,259 +307,144 @@ def crop_image(hypercube_of_images, name):
                     break
                 reference_files[b] = current_dir + '/' + reference_files[b]
                 
-                
-            ref_images_cube = (np.array(imageio.imread(reference_files[i])) for i in range(8))
-            ref_hypercube_of_images = np.dstack((tuple(ref_images_cube)))
-        
-        
-            hc_output = hypercube_of_images
-            hc_output = hc_output / (ref_hypercube_of_images+1e-3)
             
+            gray = lambda rgb : np.dot(rgb[... , :3] , [1. , 1., 1. ])
+            ref_images_cube = np.array(list(gray(np.array(imageio.imread(reference_files[i]))).T for i in range(8))).T
+#             ref_hypercube_of_images = np.dstack((tuple(ref_images_cube)))
+        
+               
+            hc_output = hypercube_of_images
+            hc_output = hc_output / (ref_images_cube+1e-4)
             return hc_output
         
     window.close()
     return Work_Book
 
-
-# In[4]:
-
-
-def PCA_ICA(names, number_of_components, if_use_ICA = True):
+def BLB(names):
     hypercube_of_images = {}
     for i in names:
         hypercube_of_images[i] = crop_image(upload(i), i)
         
-    width = hypercube_of_images[names[0]].shape[0]
-    height = hypercube_of_images[names[0]].shape[1]
-    channels = hypercube_of_images[names[0]].shape[2]
-    image = np.reshape(hypercube_of_images[names[0]], (width*height, channels))
+#     width = hypercube_of_images[names[0]].shape[0]
+#     height = hypercube_of_images[names[0]].shape[1]
+#     channels = hypercube_of_images[names[0]].shape[2]
+#     image = np.reshape(hypercube_of_images[names[0]], (width*height, channels))
     
-    df = pd.DataFrame(image)
-    PCA_transformer = sklearnPCA(n_components=number_of_components, svd_solver='arpack') 
-    # Has to be arpack or fixed random number for results to be reproducable between different trials
-    # X_std = StandardScaler().fit_transform(df) Values already normalized in 8bit because of the camera [0:255]
-    # Y_sklearn = sklearn_pca.fit_transform(X_std)
-    PCA_transformed_hypercube = PCA_transformer.fit_transform(df)
-    output = {}
-    print('Explained_variance_ratio_by_each_component = ', PCA_transformer.explained_variance_ratio_)
-    print('Explained_variance_ratio = ', np.sum(PCA_transformer.explained_variance_ratio_))
+    Integral_overlap_matrix = pd.DataFrame([[35413.747686, 48266.475592, 32028.051361, 1288.594416, 100.0],
+                    [22543.710184, 19790.442082, 11538.285799, 1317.883702, 100.0],
+                    [26312.342124, 29340.161853, 2048.738386, 1243.050297, 100.0],
+                    [1513.971083, 9325.287882, 157.872203, 1201.872216, 100.0],
+                    [1161.464976, 7318.000622, 162.649841, 1137.740404, 100.0],
+                    [2435.635426, 2820.807862, 221.053701, 672.096616, 100.0],
+                    [3058.380772, 2578.204305, 242.955611, 563.051536, 100.0],
+                    [3880.828582, 3115.201821, 293.456509, 475.588304, 100.0]],
+                    index = ['460', '495', '520', '630', '660', '800', '850', '880'],
+                    columns = ['Hb02','Hb','Bilirubin','Melanin','Background'])
     
-    if if_use_ICA:
-        ICA_transformer = FastICA(n_components=number_of_components, random_state=1) 
-        # Random_state has to be fixed for results to be reproducable between different trials
-        ICA_PCA_transformed_hypercube = ICA_transformer.fit_transform(PCA_transformed_hypercube)
-        y_df = pd.DataFrame(ICA_PCA_transformed_hypercube)
-        output[names[0]] = np.array(y_df).reshape((width,height,number_of_components))
+    Integral_overlap_matrix=Integral_overlap_matrix.iloc[:, [0, 1, 3, 4]]
+    Q, R = la.qr(Integral_overlap_matrix, mode="complete") 
+    R_new = R[:4]
+    Q_new = Q.T[:4]
+    
+    amount_of_choromophores = R_new.shape[0]
+    BLB_result = {}
+    for i in tqdm(names):
+        Skin_hypercube = hypercube_of_images[i].T #gives (8, 2048, 1536)
+        Concentration_Matrix=np.zeros([amount_of_choromophores, Skin_hypercube.shape[1], Skin_hypercube.shape[2]])
         
-        for i in names[1:]:
-            width = hypercube_of_images[i].shape[0]
-            height = hypercube_of_images[i].shape[1]
-            image = np.reshape(hypercube_of_images[i], (width*height, channels))
-            df = pd.DataFrame(image)
-            PCA_transformed_hypercube = PCA_transformer.transform(df)
-            ICA_PCA_transformed_hypercube = ICA_transformer.transform(PCA_transformed_hypercube)
-            y_df = pd.DataFrame(ICA_PCA_transformed_hypercube)
-            output[i] = np.array(y_df).reshape((width,height,number_of_components))
-        return output
-      
-    else:
-        y_df = pd.DataFrame(PCA_transformed_hypercube)
-        output[names[0]] = np.array(y_df).reshape((width,height,number_of_components))
-        for i in names[1:]:
-            width = hypercube_of_images[i].shape[0]
-            height = hypercube_of_images[i].shape[1]
-            image = np.reshape(hypercube_of_images[i], (width*height, channels))
-            df = pd.DataFrame(image)
-            PCA_transformed_hypercube = PCA_transformer.fit_transform(df)
-            y_df = pd.DataFrame(PCA_transformed_hypercube)
-            output[i] = np.array(y_df).reshape((width,height,number_of_components))
-            print('Explained_variance_ratio_by_each_component = ', PCA_transformer.explained_variance_ratio_)
-            print('Explained_variance_ratio = ', np.sum(PCA_transformer.explained_variance_ratio_))
+        for first_it in range(Skin_hypercube.shape[1]): 
+            for second_it in range(Skin_hypercube.shape[2]): 
+                OD_column = - np.log10(Skin_hypercube[:, first_it, second_it]+1e-10) 
+                Concentration_Matrix[:, first_it, second_it] = spla.solve_triangular(R_new, Q_new.dot(OD_column), lower=False)
+        BLB_result[i] = Concentration_Matrix      
+        
+    return BLB_result   
 
-        return output
-
-
-# In[5]:
-
-
-def Segmentation_Otsu(dictionary_of_visits, name, which_component_to_use, gaussian_blur):
+def Segmentation_Otsu(skin_hypercube, gaussian_blur):
     
-    to_fit_area = dictionary_of_visits[name][:,:,which_component_to_use]
-    uint8_to_fit_area = np.array((to_fit_area - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255, dtype = np.uint8)
+    to_fit_area = np.absolute(skin_hypercube[:,:,0]) + np.absolute(skin_hypercube[:,:,1])
     blured_area = gaussian(to_fit_area, gaussian_blur)
     min_value = blured_area.min()
     max_value = blured_area.max()
-    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
-    
+    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)  
     ret, th = cv2.threshold(treated_area,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    # treshold_in_real_map = ret*(max_value - min_value)/255 + min_value
-#     contours, hierarchy = cv2.findContours(th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
-# #     area_list = []
-# #     for cnt in contours:
-# #         area_list.append(cv2.contourArea(cnt))
-# #     contour = contours[np.array(area_list).argmax()] 
-#     #We are interested in only highest area contour 
-    
-#     image_with_contours = cv2.drawContours(uint8_to_fit_area, contours, -1, (255, 0, 255), 5)
-#     plt.imshow(image_with_contours)
-#     plt.xticks(ticks = [])
-#     plt.yticks(ticks = [])
-#     plt.show()
-    
-    
-# #     mask = np.zeros(to_fit_area.shape, np.uint8)
-# #     cv2.drawContours(mask, [contour], 0, 255, -1)
-# #     cv2.drawContours(mask, [contours], 0, 255, -1)
-    
-#     plt.imshow(th*to_fit_area)
-#     plt.xticks(ticks = [])
-#     plt.yticks(ticks = [])
-#     plt.show()
-
    
     return th
-#There is a need to add mask as determined by all contours
-#Also by hands choice of contour, something like: "please pick # of a contour"
 
-
-# In[6]:
-
-
-def analysis_of_distributions(dictionary_of_visits, names, which_component_to_use, gaussian_blur):
+def analysis_of_distributions(dictionary_of_visits, names, gaussian_blur):
     mean_array = {'hemangioma':{}, 'skin': {}}
     std_array = {'hemangioma':{}, 'skin': {}}
     contour_data_for_stat = {}
     dataframe_for_stat = pd.DataFrame(contour_data_for_stat)
     
     for name in names:
-        mask = Segmentation_Otsu(dictionary_of_visits = dictionary_of_visits, name = name, which_component_to_use = which_component_to_use, gaussian_blur = gaussian_blur)
+        mask = Segmentation_Otsu(dictionary_of_visits[name].T, gaussian_blur = gaussian_blur)
+        to_fit_area = np.absolute(dictionary_of_visits[name].T[:,:,0]) + np.absolute(dictionary_of_visits[name].T[:,:,1])
         
-        to_fit_area = dictionary_of_visits[name][:,:,which_component_to_use]
-        uint8_to_fit_area = np.array((to_fit_area - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255, dtype = np.uint8)
-
         X = np.ravel(mask * to_fit_area)/255
-#         plt.imshow(uint8_to_fit_area)
-#         plt.colorbar()
-#         plt.show()
-        
-#         plt.imshow(mask)
-#         plt.colorbar()
-#         plt.show()
-        
-#         plt.imshow(mask * uint8_to_fit_area)
-#         plt.colorbar()
-#         plt.show()
-        
-#         plt.imshow(mask*to_fit_area)
-#         plt.colorbar()
-#         plt.show()
-        
-        
-        #values_hemangioma = [i for i in X if i!=0]
         values_hemangioma = np.array((np.array([i for i in X if i!=0]) - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255)
-        
         X = np.ravel((255 - mask) * to_fit_area)/255
         values_skin = np.array((np.array([i for i in X if i!=0]) - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255)
-        
-
         mean_array['skin'][name] = np.mean(values_skin)
         std_array['skin'][name] = np.std(values_skin)
-        
-
         mean_array['hemangioma'][name] = np.mean(values_hemangioma)
         std_array['hemangioma'][name] = np.std(values_hemangioma)
         
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        fig.suptitle('patient ' + name)
+        ax1.imshow(to_fit_area, vmin = np.quantile(to_fit_area, 0.05), vmax = np.quantile(to_fit_area, 0.95))
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        ax2.imshow(mask)
+        ax2.set_xticks([])
+        ax2.set_yticks([])
+        plt.show()
+        
+        
     return mean_array, std_array
 
-
-# In[7]:
-
-
-def align_yaxis(ax1, ax2):
-    y_lims = np.array([ax.get_ylim() for ax in [ax1, ax2]])
-
-    # force 0 to appear on both axes, comment if don't need
-    y_lims[:, 0] = y_lims[:, 0].clip(None, 0)
-    y_lims[:, 1] = y_lims[:, 1].clip(0, None)
-
-    # normalize both axes
-    y_mags = (y_lims[:,1] - y_lims[:,0]).reshape(len(y_lims),1)
-    y_lims_normalized = y_lims / y_mags
-
-    # find combined range
-    y_new_lims_normalized = np.array([np.min(y_lims_normalized), np.max(y_lims_normalized)])
-
-    # denormalize combined range to get new axes
-    new_lim1, new_lim2 = y_new_lims_normalized * y_mags
-    ax1.set_ylim(new_lim1)
-    ax2.set_ylim(new_lim2)
-
+def Borders_values(dictionary_of_visits, name, gaussian_blur):#, show_pic = False):
     
-    
-def Offset_Percentage_Adjustment(dictionary_of_visits, name, which_component_to_use, gaussian_blur, offset_percent_1, offset_percent_2):
-    
-    to_fit_area = dictionary_of_visits[name][:,:,which_component_to_use]
-    uint8_to_fit_area = np.array((to_fit_area - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255, dtype = np.uint8)
+    to_fit_area = np.absolute(dictionary_of_visits[name].T[:,:,0]) + np.absolute(dictionary_of_visits[name].T[:,:,1])
     blured_area = gaussian(to_fit_area, gaussian_blur)
     min_value = blured_area.min()
     max_value = blured_area.max()
     treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
     
-    ret, th = cv2.threshold(treated_area,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    # treshold_in_real_map = ret*(max_value - min_value)/255 + min_value
-    contours, hierarchy = cv2.findContours(th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
-    area_list = []
-    for cnt in contours:
-        area_list.append(cv2.contourArea(cnt))
-    contour = contours[np.array(area_list).argmax()] 
-    #We are interested in only highest area contour 
-    
-    start = ret*(1-offset_percent_1/100)
-    stop = ret*(1+offset_percent_2/100)
-    
-    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
-    th1, binary = cv2.threshold(treated_area, start, 255, cv2.THRESH_BINARY)
-    contours, hierarchy = cv2.findContours(np.uint8(255*binary), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    image = cv2.drawContours(treated_area, contours, -1, (255, 0, 255), 5)
-    plt.imshow(image)
-    plt.show()
-    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
-    th2, binary = cv2.threshold(treated_area, stop, 255, cv2.THRESH_BINARY)
-    contours, hierarchy = cv2.findContours(np.uint8(255*binary), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    image = cv2.drawContours(treated_area, contours, -1, (255, 0, 255), 5)
-    plt.imshow(image)
-    plt.show()
-    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
-    
-    return ret, th1, th2
-    
-    
-    
-    
-def Borders_values(dictionary_of_visits, name, which_component_to_use, gaussian_blur, step = 1):#, show_pic = False):
-    
-    to_fit_area = dictionary_of_visits[name][:,:,which_component_to_use]
-#     uint8_to_fit_area = np.array((to_fit_area - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255, dtype = np.uint8)
-    blured_area = gaussian(to_fit_area, gaussian_blur)
-    min_value = blured_area.min()
-    max_value = blured_area.max()
-#     treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
-    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
+    to_fit_area_true = np.array((blured_area - min_value)/(max_value - min_value)*255)
     
     ret, th = cv2.threshold(treated_area,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    
-#     start = ret*(1-offset_percent_1/100)
-#     stop = max_value#ret*(1+offset_percent_2/100)
+    step = 1
     stop = 255
-    mean, std, area, length = line_array(treated_area, ret, stop, step)
+    mean, std, area, length = line_array(treated_area, to_fit_area_true, ret, stop, step)
        
     return mean, std, area, length
 
 
+def line_array(treated_area, to_fit_area, start, stop, step = 1):
+                  
+    mean = []
+    std = []
+    area = []
+    length = []
+    for i in tqdm(np.arange(start, stop, step)):
+        m, s, a, l = contours(treated_area, to_fit_area, i, i+step)
+        
+        if (np.isnan(m) or np.isnan(s)):
+            mean.append(mean[-1])
+            std.append(std[-1])
+            area.append(area[-1])
+            length.append(length[-1])
+        else:
+            mean.append(m)
+            std.append(s)
+            area.append(a)
+            length.append(l)
+            
+    return mean, std, area, length
 
-def contours(treated_area, tr_start, tr_end):#, show_pic = False):
+
+def contours(treated_area, to_fit_area, tr_start, tr_end):
         
     _, binary = cv2.threshold(treated_area, tr_start, 255, cv2.THRESH_BINARY)
     contours, hierarchy = cv2.findContours(np.uint8(255*binary), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -578,17 +455,9 @@ def contours(treated_area, tr_start, tr_end):#, show_pic = False):
     else:
         contour_area = sum(area_ar)     
         
-    #     contours, hierarchy = cv2.findContours(th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
-#     area_list = []
-#     for cnt in contours:
-#         area_list.append(cv2.contourArea(cnt))
-#     contour = contours[np.array(area_list).argmax()] 
-    #We are interested in only highest area contour 
-
     _, binary2 = cv2.threshold(treated_area, tr_end, 255, cv2.THRESH_BINARY)
     
-#     if show_pic:
+#     if True:
 #         contours, hierarchy = cv2.findContours(np.uint8(255*(binary-binary2)), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 #         image2 = cv2.drawContours(np.uint8(treated_area), contours, -1, (255, 0, 255), 5)
 #         plt.imshow(image2)
@@ -596,153 +465,30 @@ def contours(treated_area, tr_start, tr_end):#, show_pic = False):
 #         plt.imshow((binary-binary2)*treated_area)
 #         plt.show()
     
-    X = np.ravel((binary2-binary)*treated_area)
-    X = [i for i in X if i!=0]
-    return (np.mean(X), np.std(X), contour_area, len(X))
-
-def line_array(treated_area, start, stop, step = 1):#, show_pic = False):
-                  
-    mean = []
-    std = []
-    area = []
-    length = []
-    for i in tqdm(np.arange(start, stop, step)):
-        m, s, a, l = contours(treated_area, i, i+step)
-        
-        if (np.isnan(m) or np.isnan(s)):
-            mean.append(mean[-1])
-            std.append(std[-1])
-            area.append(area[-1])
-            length.append(length[-1])
-        else:
-            mean.append(m)
-            std.append(s)
-            area.append(a)
-            length.append(l)
-            
-    return mean, std, area, length
-
-
-def Full_Image_Borders_values(dictionary_of_visits, name, which_component_to_use, gaussian_blur, step = 1, show_pic = False):
+#     X = np.ravel((binary2-binary)*treated_area)
+#     X = [i for i in X if i!=0]
     
-    to_fit_area = dictionary_of_visits[name][:,:,which_component_to_use]
-    uint8_to_fit_area = np.array((to_fit_area - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255, dtype = np.uint8)
+    X = np.ravel((binary2-binary) * to_fit_area)/255
+    XX = np.array((np.array([i for i in X if i!=0]) - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255)
+        
+    return (np.mean(XX), np.std(XX), contour_area, len(XX))
+
+
+
+def extract_skin_value(dictionary_of_visits, name, gaussian_blur):#, show_pic = False):
+    
+    to_fit_area = np.absolute(dictionary_of_visits[name].T[:,:,0]) + np.absolute(dictionary_of_visits[name].T[:,:,1])
     blured_area = gaussian(to_fit_area, gaussian_blur)
     min_value = blured_area.min()
     max_value = blured_area.max()
     treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
     
-    ret, th = cv2.threshold(treated_area,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-
-    mean, std, area, length = Full_Image_line_array(treated_area, start = 0, stop = 255, step = 1, show_pic = False)
-       
-    return mean, std, area, length
-
-
-
-def Full_Image_contours(treated_area, tr_start, tr_end, show_pic = False):
-        
-    _, binary = cv2.threshold(treated_area, tr_start, 255, cv2.THRESH_BINARY)
-    contours, hierarchy = cv2.findContours(np.uint8(255*binary), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    area_ar = [cv2.contourArea(cnt) for cnt in contours]
-            
-    if area_ar == []:
-        contour_area = 0
-    else:
-        contour_area = max(area_ar)     
-        
-    #     contours, hierarchy = cv2.findContours(th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
-#     area_list = []
-#     for cnt in contours:
-#         area_list.append(cv2.contourArea(cnt))
-#     contour = contours[np.array(area_list).argmax()] 
-    #We are interested in only highest area contour 
-
-    _, binary2 = cv2.threshold(treated_area, tr_end, 255, cv2.THRESH_BINARY)
-    
-    if show_pic:
-        contours, hierarchy = cv2.findContours(np.uint8(255*(binary-binary2)), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        image2 = cv2.drawContours(np.uint8(treated_area), contours, -1, (255, 0, 255), 5)
-        plt.imshow(image2)
-        plt.show()
-        plt.imshow((binary-binary2)*treated_area)
-        plt.show()
-    
-    X = np.ravel((binary2-binary)*treated_area)
-    X = [i for i in X if i!=0]
-    return (np.mean(X), np.std(X), contour_area, len(X))
-
-def Full_Image_line_array(treated_area, start, stop, step = 1, show_pic = False):
-                  
-    mean = []
-    std = []
-    area = []
-    length = []
-    for i in tqdm(np.arange(start, stop, step)):
-        m, s, a, l = Full_Image_contours(treated_area, i, i+step, show_pic)
-        
-        if (np.isnan(m) or np.isnan(s)):
-            mean.append(mean[-1])
-            std.append(std[-1])
-            area.append(area[-1])
-            length.append(length[-1])
-        else:
-            mean.append(m)
-            std.append(s)
-            area.append(a)
-            length.append(l)
-            
-    return mean, std, area, length
-
-def print_borders_thresholds(dictionary_of_visits, name, which_component_to_use, gaussian_blur, offset_percent_1, offset_percent_2, step = 1, show_pic = False):
-    
-    to_fit_area = dictionary_of_visits[name][:,:,which_component_to_use]
-    uint8_to_fit_area = np.array((to_fit_area - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255, dtype = np.uint8)
-    blured_area = gaussian(to_fit_area, gaussian_blur)
-    min_value = blured_area.min()
-    max_value = blured_area.max()
-    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
+    to_fit_area_true = np.array((blured_area - min_value)/(max_value - min_value)*255)
     
     ret, th = cv2.threshold(treated_area,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    
-    start = ret*(1-offset_percent_1/100)
-    stop = ret*(1+offset_percent_2/100)
-       
-    return start, stop, ret
 
-
-def extract_skin_value(dictionary_of_visits, name, which_component_to_use, gaussian_blur):
+    new_b = 1 - th
     
-    to_fit_area = dictionary_of_visits[name][:,:,which_component_to_use]
-    uint8_to_fit_area = np.array((to_fit_area - to_fit_area.min())/(to_fit_area.max() - to_fit_area.min())*255, dtype = np.uint8)
-    blured_area = gaussian(to_fit_area, gaussian_blur)
-    min_value = blured_area.min()
-    max_value = blured_area.max()
-    treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
-    
-    ret, th = cv2.threshold(treated_area,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    # treshold_in_real_map = ret*(max_value - min_value)/255 + min_value
-    contours, hierarchy = cv2.findContours(th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-      
-#     start = ret*(1-offset_percent_1/100)
-    
-#     treated_area = np.array((blured_area - min_value)/(max_value - min_value)*255, dtype = np.uint8)
-#     th1, binary = cv2.threshold(treated_area, start, 255, cv2.THRESH_BINARY)
-#     contours, hierarchy = cv2.findContours(np.uint8(255*binary), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-#     image = cv2.drawContours(treated_area, contours, -1, (255, 0, 255), 5)
-#     plt.imshow(image)
-#     plt.show()
-#     new_b = np.array(1 - binary/255)
-    new_b = 1 - th#morphology.isotropic_dilation(th, radius = 45)
-#     plt.imshow(np.array(binary/255))
-#     plt.show()
-
-
-#     plt.imshow(new_b * treated_area)
-#     plt.colorbar()
-#     plt.show()
-    
-    X = np.ravel(new_b * treated_area)
+    X = np.ravel(new_b * to_fit_area_true)/255
     X = [i for i in X if i!=0]
     return np.mean(X)
